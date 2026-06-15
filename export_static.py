@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import argparse
 import json
 import sqlite3
 from pathlib import Path
 
-from importer import DB_PATH, ensure_db
+from importer import DB_PATH, ensure_db, import_details
 
 
 ROOT = Path(__file__).parent
@@ -17,7 +18,14 @@ def row_dict(row: sqlite3.Row) -> dict:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="GitHub Pages/PWA için statik JSON export üretir.")
+    parser.add_argument("--fetch-missing", action="store_true", help="Export öncesi eksik transcript/video detaylarını çek.")
+    parser.add_argument("--limit", type=int, default=None, help="--fetch-missing için maksimum ders.")
+    parser.add_argument("--delay", type=float, default=0.2, help="--fetch-missing için istekler arası bekleme.")
+    args = parser.parse_args()
     ensure_db()
+    if args.fetch_missing:
+        import_details(limit=args.limit, delay=args.delay)
     STATIC_DATA.mkdir(parents=True, exist_ok=True)
     LESSONS_DIR.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
@@ -38,7 +46,7 @@ def main() -> None:
                 """
                 SELECT l.id, l.category_slug, c.name AS category_name, l.position, l.title,
                        l.subtitle, l.level, l.parts, l.url, l.audio_url, l.transcript,
-                       l.details_cached_at
+                       l.youtube_video_id, l.details_cached_at
                 FROM lessons l
                 JOIN categories c ON c.slug = l.category_slug
                 ORDER BY c.position, l.position, l.title
@@ -79,6 +87,7 @@ def main() -> None:
                 "parts",
                 "url",
                 "audio_url",
+                "youtube_video_id",
                 "details_cached_at",
             )
         }

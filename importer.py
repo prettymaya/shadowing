@@ -98,6 +98,11 @@ def ensure_db() -> None:
             );
             """
         )
+        existing_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(lessons)").fetchall()
+        }
+        if "youtube_video_id" not in existing_columns:
+            conn.execute("ALTER TABLE lessons ADD COLUMN youtube_video_id TEXT DEFAULT ''")
 
 
 def parse_categories() -> list[dict]:
@@ -270,6 +275,13 @@ def fetch_lesson_details(lesson_id: int) -> None:
         lesson = conn.execute("SELECT * FROM lessons WHERE id = ?", (lesson_id,)).fetchone()
         if lesson is None:
             raise ValueError("Ders bulunamadı")
+        if str(lesson["url"]).startswith("dd-local://"):
+            conn.execute(
+                "UPDATE lessons SET details_cached_at = COALESCE(details_cached_at, ?) WHERE id = ?",
+                (datetime.now().isoformat(timespec="seconds"), lesson_id),
+            )
+            conn.commit()
+            return
     page = request_text(lesson["url"])
     data = extract_app_globals(page)
     transcript = "\n".join(challenge.get("content", "") for challenge in data.get("challenges", []))
@@ -295,10 +307,13 @@ def fetch_lesson_details(lesson_id: int) -> None:
         conn.execute(
             """
             UPDATE lessons
-            SET transcript = ?, audio_url = COALESCE(NULLIF(?, ''), audio_url), details_cached_at = ?
+            SET transcript = ?,
+                audio_url = COALESCE(NULLIF(?, ''), audio_url),
+                youtube_video_id = ?,
+                details_cached_at = ?
             WHERE id = ?
             """,
-            (transcript, data.get("audioSrc") or "", now, lesson_id),
+            (transcript, data.get("audioSrc") or "", data.get("youtubeVideoId") or "", now, lesson_id),
         )
         conn.commit()
 
@@ -310,6 +325,7 @@ def import_details(limit: int | None = None, delay: float = 0.2) -> None:
             """
             SELECT id, title FROM lessons
             WHERE details_cached_at IS NULL
+              AND url NOT LIKE 'dd-local://%'
             ORDER BY category_slug, position
             """
         ).fetchall()
@@ -317,7 +333,10 @@ def import_details(limit: int | None = None, delay: float = 0.2) -> None:
         rows = rows[:limit]
     for index, (lesson_id, title) in enumerate(rows, start=1):
         print(f"[{index}/{len(rows)}] {title}")
-        fetch_lesson_details(lesson_id)
+        try:
+            fetch_lesson_details(lesson_id)
+        except Exception as exc:
+            print(f"  Atlandı: {exc}")
         time.sleep(delay)
 
 
@@ -325,10 +344,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Daily Dictation katalogunu local SQLite'a aktarır.")
     parser.add_argument("--details", action="store_true", help="Her dersin transcript/challenge detaylarını da çek.")
     parser.add_argument("--limit", type=int, default=None, help="--details için maksimum ders sayısı.")
+    parser.add_argument("--delay", type=float, default=0.2, help="--details için istekler arası bekleme saniyesi.")
     args = parser.parse_args()
     import_catalog()
     if args.details:
-        import_details(limit=args.limit)
+        import_details(limit=args.limit, delay=args.delay)
 
 
 if __name__ == "__main__":

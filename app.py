@@ -41,6 +41,9 @@ def root_static_asset(asset: str):
         "styles.css",
         "manifest.webmanifest",
         "icon.svg",
+        "icon-192.png",
+        "icon-512.png",
+        "apple-touch-icon.png",
         "sw.js",
     }
     if asset in allowed or asset.startswith("data/"):

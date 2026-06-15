@@ -6,6 +6,9 @@ const ASSETS = [
   "app.js",
   "manifest.webmanifest",
   "icon.svg",
+  "icon-192.png",
+  "icon-512.png",
+  "apple-touch-icon.png",
   "data/catalog.json"
 ];
 

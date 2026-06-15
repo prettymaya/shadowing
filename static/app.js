@@ -106,7 +106,7 @@ async function openLesson(id) {
   $("lessonTitle").textContent = lesson.title;
   $("lessonMeta").textContent = [lesson.level, lesson.parts ? `${lesson.parts} parts` : "", lesson.completed_at ? `Yapıldı: ${lesson.completed_at}` : ""].filter(Boolean).join(" · ");
   $("notes").value = lesson.notes || "";
-  $("audio").src = lesson.audio_url || "";
+  renderMedia(lesson);
   $("challengeCount").textContent = `${lesson.challenges.length} satır`;
   $("transcript").innerHTML = lesson.challenges.map((line) => `
     <div class="line">
@@ -128,6 +128,43 @@ async function openLesson(id) {
     button.addEventListener("click", () => copyText(button.dataset.copy || "", button, "Satır kopyalandı"));
   });
   await loadLessons();
+  focusPlayerOnSmallScreen();
+}
+
+function renderMedia(lesson) {
+  const audio = $("audio");
+  const videoWrap = $("videoWrap");
+  audio.pause();
+  audio.removeAttribute("src");
+  audio.load();
+  videoWrap.innerHTML = "";
+  videoWrap.classList.add("hidden");
+
+  if (lesson.audio_url) {
+    audio.classList.remove("hidden");
+    audio.src = lesson.audio_url;
+    return;
+  }
+
+  audio.classList.add("hidden");
+  if (lesson.youtube_video_id) {
+    videoWrap.classList.remove("hidden");
+    videoWrap.innerHTML = `
+      <iframe
+        src="https://www.youtube.com/embed/${encodeURIComponent(lesson.youtube_video_id)}"
+        title="${escapeHtml(lesson.title)}"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen></iframe>
+    `;
+  }
+}
+
+function focusPlayerOnSmallScreen() {
+  if (window.matchMedia("(max-width: 980px)").matches) {
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: $("playerSection").offsetTop, behavior: "auto" });
+    });
+  }
 }
 
 function escapeHtml(value) {
