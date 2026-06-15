@@ -14,6 +14,8 @@ const $ = (id) => document.getElementById(id);
 const isStaticHost = !["localhost", "127.0.0.1"].includes(location.hostname);
 const progressKey = "shadowing-progress-v1";
 const sessionsKey = "shadowing-sessions-v1";
+const themeKey = "shadowing-theme-v1";
+const defaultTheme = { mode: "system", accent: "teal" };
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -49,6 +51,50 @@ function loadLocalState() {
 function saveLocalState() {
   localStorage.setItem(progressKey, JSON.stringify(state.progress));
   localStorage.setItem(sessionsKey, JSON.stringify(state.sessions.slice(-500)));
+}
+
+function loadTheme() {
+  try {
+    return { ...defaultTheme, ...JSON.parse(localStorage.getItem(themeKey) || "{}") };
+  } catch (_) {
+    return { ...defaultTheme };
+  }
+}
+
+function saveTheme(theme) {
+  localStorage.setItem(themeKey, JSON.stringify(theme));
+}
+
+function applyTheme(theme = loadTheme()) {
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const resolvedMode = theme.mode === "system" ? (prefersDark ? "dark" : "light") : theme.mode;
+  document.documentElement.dataset.theme = resolvedMode;
+  document.documentElement.dataset.accent = theme.accent;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolvedMode === "dark" ? "#0b1220" : getAccentColor(theme.accent));
+
+  document.querySelectorAll(".themeMode").forEach((button) => {
+    button.classList.toggle("active", button.dataset.mode === theme.mode);
+  });
+  document.querySelectorAll(".swatch").forEach((button) => {
+    button.classList.toggle("active", button.dataset.accent === theme.accent);
+  });
+}
+
+function updateTheme(partial) {
+  const next = { ...loadTheme(), ...partial };
+  saveTheme(next);
+  applyTheme(next);
+}
+
+function getAccentColor(accent) {
+  return {
+    teal: "#0f766e",
+    blue: "#2563eb",
+    violet: "#7c3aed",
+    rose: "#e11d48",
+    amber: "#d97706",
+    slate: "#475569",
+  }[accent] || "#0f766e";
 }
 
 function currentFilters() {
@@ -324,6 +370,16 @@ async function bootstrapData() {
 }
 
 function wire() {
+  applyTheme();
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (loadTheme().mode === "system") applyTheme();
+  });
+  document.querySelectorAll(".themeMode").forEach((button) => {
+    button.addEventListener("click", () => updateTheme({ mode: button.dataset.mode }));
+  });
+  document.querySelectorAll(".swatch").forEach((button) => {
+    button.addEventListener("click", () => updateTheme({ accent: button.dataset.accent }));
+  });
   ["categoryFilter", "statusFilter", "levelFilter"].forEach((id) => $(id).addEventListener("change", loadLessons));
   $("searchInput").addEventListener("input", () => {
     clearTimeout(state.searchTimer);

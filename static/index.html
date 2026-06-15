@@ -7,6 +7,19 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Shadowing">
     <title>Shadowing Local</title>
+    <script>
+      (() => {
+        try {
+          const theme = { mode: "system", accent: "teal", ...JSON.parse(localStorage.getItem("shadowing-theme-v1") || "{}") };
+          const dark = theme.mode === "dark" || (theme.mode === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.dataset.theme = dark ? "dark" : "light";
+          document.documentElement.dataset.accent = theme.accent;
+        } catch (_) {
+          document.documentElement.dataset.theme = "light";
+          document.documentElement.dataset.accent = "teal";
+        }
+      })();
+    </script>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="stylesheet" href="styles.css">
@@ -45,6 +58,27 @@
         <span>Arama</span>
         <input id="searchInput" type="search" placeholder="lesson, konu, kategori">
       </label>
+      <section class="appearance" aria-label="Görünüm ayarları">
+        <div class="appearanceRow">
+          <span>Mod</span>
+          <div class="segmented" id="themeModeGroup">
+            <button type="button" class="themeMode" data-mode="system">Sistem</button>
+            <button type="button" class="themeMode" data-mode="light">Açık</button>
+            <button type="button" class="themeMode" data-mode="dark">Koyu</button>
+          </div>
+        </div>
+        <div class="appearanceRow">
+          <span>Renk</span>
+          <div class="swatches" id="accentGroup">
+            <button type="button" class="swatch" data-accent="teal" style="--swatch:#0f766e" aria-label="Teal"></button>
+            <button type="button" class="swatch" data-accent="blue" style="--swatch:#2563eb" aria-label="Blue"></button>
+            <button type="button" class="swatch" data-accent="violet" style="--swatch:#7c3aed" aria-label="Violet"></button>
+            <button type="button" class="swatch" data-accent="rose" style="--swatch:#e11d48" aria-label="Rose"></button>
+            <button type="button" class="swatch" data-accent="amber" style="--swatch:#d97706" aria-label="Amber"></button>
+            <button type="button" class="swatch" data-accent="slate" style="--swatch:#475569" aria-label="Slate"></button>
+          </div>
+        </div>
+      </section>
       <button id="refreshBtn" class="secondary">Listeyi yenile</button>
       <p class="hint" id="modeHint">Local server modunda ders detayları otomatik cache'lenir.</p>
     </aside>
