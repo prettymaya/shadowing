@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f766e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Shadowing">
+    <title>Shadowing Local</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <aside>
+      <div class="brand">
+        <strong>Shadowing Local</strong>
+        <span>Daily Dictation çalışma defteri</span>
+      </div>
+      <div class="stats">
+        <div><b id="statTodo">0</b><span>Kalan</span></div>
+        <div><b id="statDone">0</b><span>Biten</span></div>
+        <div><b id="statToday">0</b><span>Bugün</span></div>
+      </div>
+      <label class="field">
+        <span>Kategori</span>
+        <select id="categoryFilter"></select>
+      </label>
+      <label class="field">
+        <span>Durum</span>
+        <select id="statusFilter">
+          <option value="todo">Yapılmayanlar</option>
+          <option value="all">Hepsi</option>
+          <option value="done">Shadowing yapılanlar</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Level</span>
+        <select id="levelFilter">
+          <option value="">Tümü</option>
+          <option>A1</option><option>A2</option><option>B1</option><option>B2</option><option>C1</option><option>C2</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Arama</span>
+        <input id="searchInput" type="search" placeholder="lesson, konu, kategori">
+      </label>
+      <button id="refreshBtn" class="secondary">Listeyi yenile</button>
+      <p class="hint" id="modeHint">Local server modunda ders detayları otomatik cache'lenir.</p>
+    </aside>
+
+    <main>
+      <section class="lesson-list">
+        <div class="topbar">
+          <h1>Çalışma Sırası</h1>
+          <span id="listCount">0 ders</span>
+        </div>
+        <div id="lessons"></div>
+      </section>
+
+      <section class="player">
+        <div id="emptyState" class="empty">
+          <h2>Bir ders seç</h2>
+          <p>Filtreler varsayılan olarak yapılmayan dersleri gösterir. Bitirdiğinde “Shadowing yaptım” dediğin ders tekrar karşına çıkmaz.</p>
+        </div>
+        <div id="lessonView" class="hidden">
+          <div class="playerHead">
+            <div>
+              <p id="lessonCategory"></p>
+              <h2 id="lessonTitle"></h2>
+              <span id="lessonMeta"></span>
+            </div>
+            <button id="resetBtn" class="secondary">Geri al</button>
+          </div>
+          <audio id="audio" controls preload="metadata"></audio>
+          <div class="controls">
+            <button id="backBtn">-5 sn</button>
+            <button id="loopBtn" class="secondary">Loop kapalı</button>
+            <button id="forwardBtn">+5 sn</button>
+          </div>
+          <textarea id="notes" placeholder="Bugünkü notların..."></textarea>
+          <button id="completeBtn">Shadowing yaptım</button>
+          <div class="transcriptHead">
+            <h3>Transcript</h3>
+            <div class="transcriptActions">
+              <span id="copyStatus" aria-live="polite"></span>
+              <span id="challengeCount"></span>
+              <button id="copyTranscriptBtn" class="secondary" type="button">Tümünü kopyala</button>
+            </div>
+          </div>
+          <div id="transcript"></div>
+        </div>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
