@@ -34,6 +34,7 @@ async function loadData(path, options = {}) {
   if (path === "/api/categories") return state.categories;
   if (path === "/api/stats") return staticStats();
   if (path.startsWith("/api/lessons?")) return staticLessons();
+  if (path === "/api/sessions") return staticSessions();
   const detailMatch = path.match(/^\/api\/lessons\/(\d+)$/);
   if (detailMatch) return staticLessonDetail(Number(detailMatch[1]));
   const completeMatch = path.match(/^\/api\/lessons\/(\d+)\/complete$/);
@@ -113,6 +114,22 @@ async function loadStats() {
   $("statToday").textContent = data.today || 0;
 }
 
+async function loadHistory() {
+  const sessions = await loadData("/api/sessions");
+  const selectedDate = $("historyDate").value || localDateKey(new Date());
+  const selected = sessions.filter((session) => localDateKey(session.created_at) === selectedDate);
+  $("historyList").innerHTML = selected.length ? selected.map((session) => `
+    <button class="historyItem" type="button" data-id="${session.lesson_id}">
+      <strong>${escapeHtml(session.title || "Ders")}</strong>
+      <span>${escapeHtml(session.category_name || "")}${session.seconds ? ` · ${formatSeconds(session.seconds)}` : ""}</span>
+      ${session.notes ? `<small>${escapeHtml(session.notes)}</small>` : ""}
+    </button>
+  `).join("") : `<p class="hint">Bu gün için kayıt yok.</p>`;
+  document.querySelectorAll(".historyItem").forEach((button) => {
+    button.addEventListener("click", () => openLesson(Number(button.dataset.id)));
+  });
+}
+
 async function loadCategories() {
   state.categories = await loadData("/api/categories");
   $("categoryFilter").innerHTML = [
@@ -165,8 +182,7 @@ async function openLesson(id) {
     button.addEventListener("click", () => {
       const start = Number(button.dataset.start);
       if (!Number.isNaN(start)) {
-        $("audio").currentTime = start;
-        $("audio").play();
+        seekToLine(start);
       }
     });
   });
@@ -195,14 +211,35 @@ function renderMedia(lesson) {
   audio.classList.add("hidden");
   if (lesson.youtube_video_id) {
     videoWrap.classList.remove("hidden");
-    videoWrap.innerHTML = `
-      <iframe
-        src="https://www.youtube.com/embed/${encodeURIComponent(lesson.youtube_video_id)}"
-        title="${escapeHtml(lesson.title)}"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowfullscreen></iframe>
-    `;
+    videoWrap.innerHTML = youtubeIframe(lesson.youtube_video_id, lesson.title);
   }
+}
+
+function seekToLine(start) {
+  if (state.selected?.audio_url) {
+    $("audio").currentTime = start;
+    $("audio").play();
+    return;
+  }
+  if (state.selected?.youtube_video_id) {
+    $("videoWrap").innerHTML = youtubeIframe(state.selected.youtube_video_id, state.selected.title, start, true);
+  }
+}
+
+function youtubeIframe(videoId, title, start = 0, autoplay = false) {
+  const params = new URLSearchParams({
+    start: String(Math.max(0, Math.floor(Number(start) || 0))),
+    rel: "0",
+    playsinline: "1",
+  });
+  if (autoplay) params.set("autoplay", "1");
+  return `
+    <iframe
+      src="https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params.toString()}"
+      title="${escapeHtml(title)}"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allowfullscreen></iframe>
+  `;
 }
 
 function focusPlayerOnSmallScreen() {
@@ -261,6 +298,43 @@ function showCopyStatus(message) {
   }, 1600);
 }
 
+function localDateKey(value) {
+  if (value instanceof Date) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
+  return String(value || "").slice(0, 10);
+}
+
+function localDateTime(date = new Date()) {
+  return `${localDateKey(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`;
+}
+
+function formatSeconds(seconds) {
+  const value = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(value / 60);
+  const rest = value % 60;
+  return minutes ? `${minutes} dk ${rest} sn` : `${rest} sn`;
+}
+
+async function copySelectedDaySummary() {
+  const sessions = await loadData("/api/sessions");
+  const selectedDate = $("historyDate").value || localDateKey(new Date());
+  const selected = sessions.filter((session) => localDateKey(session.created_at) === selectedDate);
+  if (!selected.length) {
+    showCopyStatus("Kayıt yok");
+    return;
+  }
+  const lines = [
+    `${selectedDate} shadowing özeti`,
+    ...selected.map((session, index) => {
+      const duration = session.seconds ? ` (${formatSeconds(session.seconds)})` : "";
+      const note = session.notes ? ` - ${session.notes}` : "";
+      return `${index + 1}. ${session.title || "Ders"} - ${session.category_name || ""}${duration}${note}`;
+    }),
+  ];
+  await copyText(lines.join("\n"), $("copyDayBtn"), "Gün özeti kopyalandı");
+}
+
 async function completeSelected() {
   if (!state.selected) return;
   const seconds = state.startedAt ? Math.round((Date.now() - state.startedAt) / 1000) : 0;
@@ -270,6 +344,7 @@ async function completeSelected() {
   });
   await loadStats();
   await loadLessons();
+  await loadHistory();
   $("lessonView").classList.add("hidden");
   $("emptyState").classList.remove("hidden");
 }
@@ -293,8 +368,8 @@ function mergeProgress(lesson) {
 function staticStats() {
   const total = state.catalogLessons.length;
   const done = state.catalogLessons.filter((lesson) => state.progress[lesson.id]?.completed_at).length;
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const today = state.sessions.filter((session) => session.created_at.slice(0, 10) === todayIso).length;
+  const todayIso = localDateKey(new Date());
+  const today = state.sessions.filter((session) => localDateKey(session.created_at) === todayIso).length;
   return { totals: { total, done, todo: total - done }, today };
 }
 
@@ -316,6 +391,21 @@ function staticLessons() {
     .slice(0, 500);
 }
 
+function staticSessions() {
+  const lessonsById = new Map(state.catalogLessons.map((lesson) => [Number(lesson.id), lesson]));
+  return [...state.sessions]
+    .reverse()
+    .map((session) => {
+      const lesson = lessonsById.get(Number(session.lesson_id)) || {};
+      return {
+        ...session,
+        title: session.title || lesson.title || "",
+        category_name: session.category_name || lesson.category_name || "",
+      };
+    })
+    .slice(0, 200);
+}
+
 async function staticLessonDetail(id) {
   const base = state.catalogLessons.find((lesson) => lesson.id === id);
   if (!base) throw new Error("Ders bulunamadı");
@@ -330,12 +420,20 @@ async function staticLessonDetail(id) {
 }
 
 function staticComplete(id, payload) {
-  const now = new Date().toISOString();
+  const now = localDateTime();
+  const lesson = state.catalogLessons.find((item) => Number(item.id) === Number(id)) || {};
   state.progress[id] = {
     completed_at: state.progress[id]?.completed_at || now,
     notes: String(payload.notes || ""),
   };
-  state.sessions.push({ lesson_id: id, created_at: now, seconds: payload.seconds || 0, notes: String(payload.notes || "") });
+  state.sessions.push({
+    lesson_id: id,
+    created_at: now,
+    seconds: payload.seconds || 0,
+    notes: String(payload.notes || ""),
+    title: lesson.title || "",
+    category_name: lesson.category_name || "",
+  });
   saveLocalState();
   return { ok: true, completed_at: state.progress[id].completed_at };
 }
@@ -386,6 +484,9 @@ function wire() {
     state.searchTimer = setTimeout(loadLessons, 180);
   });
   $("refreshBtn").addEventListener("click", loadLessons);
+  $("historyDate").value = localDateKey(new Date());
+  $("historyDate").addEventListener("change", loadHistory);
+  $("copyDayBtn").addEventListener("click", copySelectedDaySummary);
   $("completeBtn").addEventListener("click", completeSelected);
   $("resetBtn").addEventListener("click", resetSelected);
   $("copyTranscriptBtn").addEventListener("click", () => copyText(fullTranscriptText(), $("copyTranscriptBtn"), "Transcript kopyalandı"));
@@ -404,6 +505,7 @@ async function init() {
   await loadCategories();
   await loadStats();
   await loadLessons();
+  await loadHistory();
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }

@@ -169,6 +169,57 @@ button.secondary {
   border-color: var(--ink);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+.historyPanel {
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+  padding-top: 18px;
+}
+.historyHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.historyHead h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.historyHead button {
+  padding: 7px 10px;
+  font-size: 13px;
+}
+.field.compact { margin-bottom: 10px; }
+.historyList {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.historyItem {
+  width: 100%;
+  display: block;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--panel-soft);
+  color: var(--ink);
+}
+.historyItem:hover { background: var(--accent-soft); }
+.historyItem strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+.historyItem span,
+.historyItem small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
 
 main {
   display: grid;

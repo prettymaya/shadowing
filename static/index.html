@@ -81,6 +81,19 @@
       </section>
       <button id="refreshBtn" class="secondary">Listeyi yenile</button>
       <p class="hint" id="modeHint">Local server modunda ders detayları otomatik cache'lenir.</p>
+      <section class="historyPanel" aria-label="Çalışma geçmişi">
+        <div class="historyHead">
+          <h2>Geçmiş</h2>
+          <button id="copyDayBtn" class="secondary" type="button">Günü kopyala</button>
+        </div>
+        <label class="field compact">
+          <span>Gün</span>
+          <input id="historyDate" type="date">
+        </label>
+        <div id="historyList" class="historyList">
+          <p class="hint">Henüz kayıt yok.</p>
+        </div>
+      </section>
     </aside>
 
     <main>
