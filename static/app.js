@@ -8,6 +8,9 @@ const state = {
   loop: false,
   startedAt: null,
   mode: "api",
+  playbackRate: 1,
+  youtubePlayer: null,
+  youtubeApiPromise: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -15,6 +18,7 @@ const isStaticHost = !["localhost", "127.0.0.1"].includes(location.hostname);
 const progressKey = "shadowing-progress-v1";
 const sessionsKey = "shadowing-sessions-v1";
 const themeKey = "shadowing-theme-v1";
+const speedKey = "shadowing-speed-v1";
 const defaultTheme = { mode: "system", accent: "teal" };
 
 async function api(path, options = {}) {
@@ -47,11 +51,17 @@ async function loadData(path, options = {}) {
 function loadLocalState() {
   state.progress = JSON.parse(localStorage.getItem(progressKey) || "{}");
   state.sessions = JSON.parse(localStorage.getItem(sessionsKey) || "[]");
+  state.playbackRate = Number(localStorage.getItem(speedKey) || "1");
 }
 
 function saveLocalState() {
   localStorage.setItem(progressKey, JSON.stringify(state.progress));
   localStorage.setItem(sessionsKey, JSON.stringify(state.sessions.slice(-500)));
+}
+
+function savePlaybackRate(rate) {
+  state.playbackRate = Number(rate) || 1;
+  localStorage.setItem(speedKey, String(state.playbackRate));
 }
 
 function loadTheme() {
@@ -205,13 +215,14 @@ function renderMedia(lesson) {
   if (lesson.audio_url) {
     audio.classList.remove("hidden");
     audio.src = lesson.audio_url;
+    audio.playbackRate = state.playbackRate;
     return;
   }
 
   audio.classList.add("hidden");
   if (lesson.youtube_video_id) {
     videoWrap.classList.remove("hidden");
-    videoWrap.innerHTML = youtubeIframe(lesson.youtube_video_id, lesson.title);
+    renderYouTubePlayer(lesson.youtube_video_id, lesson.title);
   }
 }
 
@@ -222,8 +233,69 @@ function seekToLine(start) {
     return;
   }
   if (state.selected?.youtube_video_id) {
-    $("videoWrap").innerHTML = youtubeIframe(state.selected.youtube_video_id, state.selected.title, start, true);
+    if (state.youtubePlayer?.seekTo) {
+      state.youtubePlayer.setPlaybackRate?.(state.playbackRate);
+      state.youtubePlayer.seekTo(Math.max(0, Number(start) || 0), true);
+      state.youtubePlayer.playVideo?.();
+    } else {
+      renderYouTubePlayer(state.selected.youtube_video_id, state.selected.title, start, true);
+    }
   }
+}
+
+function seekRelative(seconds) {
+  if (state.selected?.audio_url) {
+    $("audio").currentTime = Math.max(0, $("audio").currentTime + seconds);
+    return;
+  }
+  if (state.selected?.youtube_video_id && state.youtubePlayer?.getCurrentTime) {
+    const next = Math.max(0, state.youtubePlayer.getCurrentTime() + seconds);
+    state.youtubePlayer.seekTo(next, true);
+  }
+}
+
+function renderYouTubePlayer(videoId, title, start = 0, autoplay = false) {
+  state.youtubePlayer = null;
+  $("videoWrap").innerHTML = `<div id="youtubePlayer" title="${escapeHtml(title)}"></div>`;
+  loadYouTubeApi()
+    .then(() => {
+      state.youtubePlayer = new YT.Player("youtubePlayer", {
+        videoId,
+        playerVars: {
+          start: Math.max(0, Math.floor(Number(start) || 0)),
+          rel: 0,
+          playsinline: 1,
+          autoplay: autoplay ? 1 : 0,
+        },
+        events: {
+          onReady: (event) => {
+            event.target.setPlaybackRate?.(state.playbackRate);
+            if (autoplay) event.target.playVideo?.();
+          },
+        },
+      });
+    })
+    .catch(() => {
+      $("videoWrap").innerHTML = youtubeIframe(videoId, title, start, autoplay);
+    });
+}
+
+function loadYouTubeApi() {
+  if (window.YT?.Player) return Promise.resolve();
+  if (state.youtubeApiPromise) return state.youtubeApiPromise;
+  state.youtubeApiPromise = new Promise((resolve, reject) => {
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previous?.();
+      resolve();
+    };
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    script.async = true;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return state.youtubeApiPromise;
 }
 
 function youtubeIframe(videoId, title, start = 0, autoplay = false) {
@@ -240,6 +312,15 @@ function youtubeIframe(videoId, title, start = 0, autoplay = false) {
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
       allowfullscreen></iframe>
   `;
+}
+
+function applyPlaybackRate(rate) {
+  savePlaybackRate(rate);
+  $("speedSelect").value = String(state.playbackRate);
+  $("audio").playbackRate = state.playbackRate;
+  if (state.youtubePlayer?.setPlaybackRate) {
+    state.youtubePlayer.setPlaybackRate(state.playbackRate);
+  }
 }
 
 function focusPlayerOnSmallScreen() {
@@ -490,8 +571,10 @@ function wire() {
   $("completeBtn").addEventListener("click", completeSelected);
   $("resetBtn").addEventListener("click", resetSelected);
   $("copyTranscriptBtn").addEventListener("click", () => copyText(fullTranscriptText(), $("copyTranscriptBtn"), "Transcript kopyalandı"));
-  $("backBtn").addEventListener("click", () => $("audio").currentTime = Math.max(0, $("audio").currentTime - 5));
-  $("forwardBtn").addEventListener("click", () => $("audio").currentTime += 5);
+  $("backBtn").addEventListener("click", () => seekRelative(-5));
+  $("forwardBtn").addEventListener("click", () => seekRelative(5));
+  $("speedSelect").value = String(state.playbackRate);
+  $("speedSelect").addEventListener("change", () => applyPlaybackRate($("speedSelect").value));
   $("loopBtn").addEventListener("click", () => {
     state.loop = !state.loop;
     $("audio").loop = state.loop;
@@ -500,6 +583,7 @@ function wire() {
 }
 
 async function init() {
+  loadLocalState();
   wire();
   await bootstrapData();
   await loadCategories();
