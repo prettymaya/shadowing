@@ -73,8 +73,11 @@ def main() -> None:
                     encoding="utf-8",
                 )
 
-    catalog_lessons = [
-        {
+    for category in categories:
+        category["language"] = "english"
+    catalog_lessons = []
+    for lesson in lessons:
+        item = {
             key: lesson[key]
             for key in (
                 "id",
@@ -91,8 +94,20 @@ def main() -> None:
                 "details_cached_at",
             )
         }
-        for lesson in lessons
-    ]
+        item["language"] = "english"
+        item["vimeo_video_id"] = ""
+        item["video_url"] = ""
+        catalog_lessons.append(item)
+
+    catalog_path = STATIC_DATA / "catalog.json"
+    if catalog_path.exists():
+        existing = json.loads(catalog_path.read_text(encoding="utf-8"))
+        categories.extend(
+            category for category in existing.get("categories", []) if category.get("language") == "spanish"
+        )
+        catalog_lessons.extend(
+            lesson for lesson in existing.get("lessons", []) if lesson.get("language") == "spanish"
+        )
     (STATIC_DATA / "catalog.json").write_text(
         json.dumps({"categories": categories, "lessons": catalog_lessons}, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",

@@ -1,5 +1,6 @@
 const state = {
   categories: [],
+  catalogCategories: [],
   lessons: [],
   catalogLessons: [],
   progress: {},
@@ -19,7 +20,9 @@ const progressKey = "shadowing-progress-v1";
 const sessionsKey = "shadowing-sessions-v1";
 const themeKey = "shadowing-theme-v1";
 const speedKey = "shadowing-speed-v1";
+const languageKey = "shadowing-language-v1";
 const defaultTheme = { mode: "system", accent: "teal" };
+const defaultLanguage = "english";
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -32,19 +35,19 @@ async function api(path, options = {}) {
 }
 
 async function loadData(path, options = {}) {
-  if (state.mode === "api") {
+  if (state.mode === "api" && currentLanguage() === "english") {
     return api(path, options);
   }
-  if (path === "/api/categories") return state.categories;
+  if (path === "/api/categories") return staticCategories();
   if (path === "/api/stats") return staticStats();
   if (path.startsWith("/api/lessons?")) return staticLessons();
   if (path === "/api/sessions") return staticSessions();
-  const detailMatch = path.match(/^\/api\/lessons\/(\d+)$/);
-  if (detailMatch) return staticLessonDetail(Number(detailMatch[1]));
-  const completeMatch = path.match(/^\/api\/lessons\/(\d+)\/complete$/);
-  if (completeMatch) return staticComplete(Number(completeMatch[1]), JSON.parse(options.body || "{}"));
-  const resetMatch = path.match(/^\/api\/lessons\/(\d+)\/reset$/);
-  if (resetMatch) return staticReset(Number(resetMatch[1]));
+  const detailMatch = path.match(/^\/api\/lessons\/([^/]+)$/);
+  if (detailMatch) return staticLessonDetail(decodeURIComponent(detailMatch[1]));
+  const completeMatch = path.match(/^\/api\/lessons\/([^/]+)\/complete$/);
+  if (completeMatch) return staticComplete(decodeURIComponent(completeMatch[1]), JSON.parse(options.body || "{}"));
+  const resetMatch = path.match(/^\/api\/lessons\/([^/]+)\/reset$/);
+  if (resetMatch) return staticReset(decodeURIComponent(resetMatch[1]));
   throw new Error("Statik modda bu işlem yok");
 }
 
@@ -62,6 +65,14 @@ function saveLocalState() {
 function savePlaybackRate(rate) {
   state.playbackRate = Number(rate) || 1;
   localStorage.setItem(speedKey, String(state.playbackRate));
+}
+
+function currentLanguage() {
+  return $("languageFilter")?.value || localStorage.getItem(languageKey) || defaultLanguage;
+}
+
+function saveLanguage(language) {
+  localStorage.setItem(languageKey, language || defaultLanguage);
 }
 
 function loadTheme() {
@@ -110,6 +121,7 @@ function getAccentColor(accent) {
 
 function currentFilters() {
   return {
+    language: currentLanguage(),
     category: $("categoryFilter").value,
     status: $("statusFilter").value,
     q: $("searchInput").value.trim().toLowerCase(),
@@ -136,16 +148,37 @@ async function loadHistory() {
     </button>
   `).join("") : `<p class="hint">Bu gün için kayıt yok.</p>`;
   document.querySelectorAll(".historyItem").forEach((button) => {
-    button.addEventListener("click", () => openLesson(Number(button.dataset.id)));
+    button.addEventListener("click", () => openLesson(button.dataset.id));
   });
 }
 
 async function loadCategories() {
   state.categories = await loadData("/api/categories");
+  renderLevelOptions();
   $("categoryFilter").innerHTML = [
     `<option value="">Tüm kategoriler</option>`,
     ...state.categories.map((c) => `<option value="${c.slug}">${c.name} (${c.lesson_count})</option>`),
   ].join("");
+}
+
+function renderLevelOptions() {
+  const language = currentLanguage();
+  const selected = $("levelFilter").value;
+  const fallback = language === "spanish"
+    ? ["Beginner Spanish", "Intermediate Spanish", "Advanced Spanish"]
+    : ["A1", "A2", "B1", "B2", "C1", "C2"];
+  const levels = [...new Set(
+    state.catalogLessons
+      .filter((lesson) => (lesson.language || "english") === language)
+      .map((lesson) => lesson.level)
+      .filter(Boolean)
+  )];
+  const options = levels.length ? levels : fallback;
+  $("levelFilter").innerHTML = [
+    `<option value="">Tümü</option>`,
+    ...options.map((level) => `<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`),
+  ].join("");
+  if (options.includes(selected)) $("levelFilter").value = selected;
 }
 
 async function loadLessons() {
@@ -164,7 +197,7 @@ async function loadLessons() {
   `).join("");
   $("lessons").innerHTML = html || `<div class="empty"><h2>Liste boş</h2><p>Filtreleri genişlet veya import çalıştır.</p></div>`;
   document.querySelectorAll(".lesson").forEach((el) => {
-    el.addEventListener("click", () => openLesson(Number(el.dataset.id)));
+    el.addEventListener("click", () => openLesson(el.dataset.id));
   });
 }
 
@@ -223,6 +256,12 @@ function renderMedia(lesson) {
   if (lesson.youtube_video_id) {
     videoWrap.classList.remove("hidden");
     renderYouTubePlayer(lesson.youtube_video_id, lesson.title);
+    return;
+  }
+
+  if (lesson.vimeo_video_id) {
+    videoWrap.classList.remove("hidden");
+    videoWrap.innerHTML = vimeoIframe(lesson.vimeo_video_id, lesson.title);
   }
 }
 
@@ -310,6 +349,22 @@ function youtubeIframe(videoId, title, start = 0, autoplay = false) {
       src="https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params.toString()}"
       title="${escapeHtml(title)}"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allowfullscreen></iframe>
+  `;
+}
+
+function vimeoIframe(videoId, title) {
+  const params = new URLSearchParams({
+    playsinline: "1",
+    title: "0",
+    byline: "0",
+    portrait: "0",
+  });
+  return `
+    <iframe
+      src="https://player.vimeo.com/video/${encodeURIComponent(videoId)}?${params.toString()}"
+      title="${escapeHtml(title)}"
+      allow="autoplay; fullscreen; picture-in-picture"
       allowfullscreen></iframe>
   `;
 }
@@ -447,16 +502,35 @@ function mergeProgress(lesson) {
 }
 
 function staticStats() {
-  const total = state.catalogLessons.length;
-  const done = state.catalogLessons.filter((lesson) => state.progress[lesson.id]?.completed_at).length;
+  const lessons = catalogLessonsForLanguage();
+  const total = lessons.length;
+  const done = lessons.filter((lesson) => state.progress[lesson.id]?.completed_at).length;
   const todayIso = localDateKey(new Date());
-  const today = state.sessions.filter((session) => localDateKey(session.created_at) === todayIso).length;
+  const today = state.sessions.filter((session) => {
+    const lesson = lessonById(session.lesson_id);
+    return localDateKey(session.created_at) === todayIso && (lesson.language || "english") === currentLanguage();
+  }).length;
   return { totals: { total, done, todo: total - done }, today };
+}
+
+function staticCategories() {
+  const language = currentLanguage();
+  return state.catalogCategories.filter((category) => (category.language || "english") === language);
+}
+
+function catalogLessonsForLanguage() {
+  const language = currentLanguage();
+  return state.catalogLessons.filter((lesson) => (lesson.language || "english") === language);
+}
+
+function lessonById(id) {
+  const lessonId = String(id);
+  return state.catalogLessons.find((lesson) => String(lesson.id) === lessonId) || {};
 }
 
 function staticLessons() {
   const filters = currentFilters();
-  return state.catalogLessons
+  return catalogLessonsForLanguage()
     .map(mergeProgress)
     .filter((lesson) => {
       if (filters.category && lesson.category_slug !== filters.category) return false;
@@ -473,26 +547,26 @@ function staticLessons() {
 }
 
 function staticSessions() {
-  const lessonsById = new Map(state.catalogLessons.map((lesson) => [Number(lesson.id), lesson]));
   return [...state.sessions]
     .reverse()
     .map((session) => {
-      const lesson = lessonsById.get(Number(session.lesson_id)) || {};
+      const lesson = lessonById(session.lesson_id);
       return {
         ...session,
         title: session.title || lesson.title || "",
         category_name: session.category_name || lesson.category_name || "",
       };
     })
+    .filter((session) => (lessonById(session.lesson_id).language || "english") === currentLanguage())
     .slice(0, 200);
 }
 
 async function staticLessonDetail(id) {
-  const base = state.catalogLessons.find((lesson) => lesson.id === id);
-  if (!base) throw new Error("Ders bulunamadı");
+  const base = lessonById(id);
+  if (!base.id) throw new Error("Ders bulunamadı");
   let detail = { ...base, challenges: [] };
   try {
-    const res = await fetch(`data/lessons/${id}.json`);
+    const res = await fetch(`data/lessons/${encodeURIComponent(id)}.json`);
     if (res.ok) detail = await res.json();
   } catch (_) {
     // Statik export'ta detay yoksa transcript boş kalır.
@@ -502,7 +576,7 @@ async function staticLessonDetail(id) {
 
 function staticComplete(id, payload) {
   const now = localDateTime();
-  const lesson = state.catalogLessons.find((item) => Number(item.id) === Number(id)) || {};
+  const lesson = lessonById(id);
   state.progress[id] = {
     completed_at: state.progress[id]?.completed_at || now,
     notes: String(payload.notes || ""),
@@ -527,6 +601,14 @@ function staticReset(id) {
 
 async function bootstrapData() {
   loadLocalState();
+  $("languageFilter").value = localStorage.getItem(languageKey) || defaultLanguage;
+  const res = await fetch("data/catalog.json");
+  if (res.ok) {
+    const catalog = await res.json();
+    state.catalogCategories = catalog.categories.map((category) => ({ language: "english", ...category }));
+    state.catalogLessons = catalog.lessons.map((lesson) => ({ language: "english", ...lesson }));
+  }
+
   if (!isStaticHost) {
     try {
       await api("/api/stats");
@@ -540,11 +622,7 @@ async function bootstrapData() {
     state.mode = "static";
   }
 
-  const res = await fetch("data/catalog.json");
-  if (!res.ok) throw new Error("Statik katalog bulunamadı. python3 export_static.py çalıştır.");
-  const catalog = await res.json();
-  state.categories = catalog.categories;
-  state.catalogLessons = catalog.lessons;
+  if (!state.catalogLessons.length) throw new Error("Statik katalog bulunamadı. python3 export_static.py çalıştır.");
   $("modeHint").textContent = "GitHub/iPhone modunda kayıtlar bu cihazın tarayıcı depolamasında tutulur.";
 }
 
@@ -558,6 +636,17 @@ function wire() {
   });
   document.querySelectorAll(".swatch").forEach((button) => {
     button.addEventListener("click", () => updateTheme({ accent: button.dataset.accent }));
+  });
+  $("languageFilter").addEventListener("change", async () => {
+    saveLanguage(currentLanguage());
+    $("categoryFilter").value = "";
+    $("levelFilter").value = "";
+    $("lessonView").classList.add("hidden");
+    $("emptyState").classList.remove("hidden");
+    await loadCategories();
+    await loadStats();
+    await loadLessons();
+    await loadHistory();
   });
   ["categoryFilter", "statusFilter", "levelFilter"].forEach((id) => $(id).addEventListener("change", loadLessons));
   $("searchInput").addEventListener("input", () => {

@@ -1,4 +1,4 @@
-const CACHE_NAME = "shadowing-static-v4";
+const CACHE_NAME = "shadowing-static-v5";
 const ASSETS = [
   "./",
   "index.html",
