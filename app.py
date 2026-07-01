@@ -15,6 +15,7 @@ from importer import BASE_URL, DB_PATH, ensure_db, fetch_lesson_details
 
 
 ROOT = Path(__file__).parent
+PRIVATE_DATA = ROOT / "private_data"
 app = Flask(__name__, static_folder="static")
 
 
@@ -49,6 +50,16 @@ def root_static_asset(asset: str):
     if asset in allowed or asset.startswith("data/"):
         return send_from_directory(app.static_folder, asset)
     return jsonify({"error": "not found"}), 404
+
+
+@app.get("/private-data/<path:asset>")
+def private_data_asset(asset: str):
+    path = (PRIVATE_DATA / asset).resolve()
+    if not path.is_relative_to(PRIVATE_DATA.resolve()) or path.suffix != ".json":
+        return jsonify({"error": "not found"}), 404
+    if not path.exists():
+        return jsonify({"error": "not found"}), 404
+    return send_from_directory(path.parent, path.name)
 
 
 @app.get("/api/stats")

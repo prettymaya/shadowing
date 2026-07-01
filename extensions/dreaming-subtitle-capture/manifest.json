@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Dreaming Subtitle Capture",
+  "version": "0.1.0",
+  "description": "Copy visible video subtitle/caption text from Dreaming pages for personal study.",
+  "permissions": ["activeTab", "scripting", "clipboardWrite"],
+  "host_permissions": [
+    "https://app.dreaming.com/*",
+    "https://www.youtube.com/*",
+    "https://www.youtube-nocookie.com/*"
+  ],
+  "action": {
+    "default_title": "Copy subtitles",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://app.dreaming.com/*",
+        "https://www.youtube.com/*",
+        "https://www.youtube-nocookie.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": [
+        "https://app.dreaming.com/*",
+        "https://www.youtube.com/*",
+        "https://www.youtube-nocookie.com/*"
+      ]
+    }
+  ]
+}

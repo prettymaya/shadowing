@@ -164,7 +164,9 @@ async function loadCategories() {
 function renderLevelOptions() {
   const language = currentLanguage();
   const selected = $("levelFilter").value;
-  const fallback = language === "spanish"
+  const fallback = language === "dreaming"
+    ? ["superbeginner", "beginner", "intermediate", "advanced"]
+    : language === "spanish"
     ? ["Beginner Spanish", "Intermediate Spanish", "Advanced Spanish"]
     : ["A1", "A2", "B1", "B2", "C1", "C2"];
   const levels = [...new Set(
@@ -608,6 +610,8 @@ async function bootstrapData() {
     state.catalogCategories = catalog.categories.map((category) => ({ language: "english", ...category }));
     state.catalogLessons = catalog.lessons.map((lesson) => ({ language: "english", ...lesson }));
   }
+  await loadPrivateCatalogs();
+  syncLanguageOptions();
 
   if (!isStaticHost) {
     try {
@@ -624,6 +628,35 @@ async function bootstrapData() {
 
   if (!state.catalogLessons.length) throw new Error("Statik katalog bulunamadı. python3 export_static.py çalıştır.");
   $("modeHint").textContent = "GitHub/iPhone modunda kayıtlar bu cihazın tarayıcı depolamasında tutulur.";
+}
+
+async function loadPrivateCatalogs() {
+  if (isStaticHost) return;
+  try {
+    const res = await fetch("/private-data/dreaming/catalog.json", { cache: "no-store" });
+    if (!res.ok) return;
+    const catalog = await res.json();
+    state.catalogCategories.push(
+      ...catalog.categories.map((category) => ({ language: "dreaming", private: true, ...category }))
+    );
+    state.catalogLessons.push(
+      ...catalog.lessons.map((lesson) => ({ language: "dreaming", private: true, ...lesson }))
+    );
+  } catch (_) {
+    // Private Dreaming data is optional and intentionally absent from GitHub Pages.
+  }
+}
+
+function syncLanguageOptions() {
+  const dreamingOption = document.querySelector('#languageFilter option[value="dreaming"]');
+  const hasDreaming = state.catalogLessons.some((lesson) => lesson.language === "dreaming");
+  if (!hasDreaming && dreamingOption) {
+    dreamingOption.remove();
+    if ($("languageFilter").value === "dreaming") {
+      $("languageFilter").value = defaultLanguage;
+      saveLanguage(defaultLanguage);
+    }
+  }
 }
 
 function wire() {
